@@ -1,0 +1,441 @@
+#billing_gui.py
+
+import tkinter as tk
+from  tkinter import ttk
+from ttkbootstrap.constants import *
+import mysql.connector
+
+from db import with_cursor
+
+rows = []
+medicine_list = []
+def billing_transaction(app): 
+    # Lists to store medicine data
+    medicine_data = []
+    #medicine_list = []
+    #rows = []
+
+    # Function to add medicine data to the list
+    def add_medicine():
+        price = 0
+        patient_name = patient_name_entry.get()
+        patient_mobile = patient_mobile_entry.get()
+        doctor_name = doctor_name_entry.get()
+        mode_of_pay = mode_of_pay_entry.get()
+
+        #med_name = med_name_entry.get()
+        med_name = name_combobox.get()
+        #manufacturer = manufacturer_entry.get()
+        quantity = quantity_entry.get()
+        print("ok..",rows)
+        for row in rows:
+            if row[2] == med_name:
+                price = float(row[5])
+                #price_entry.insert(0,row[5])
+                if int(quantity) > row[4]:
+                    show_popup("Error", "Qty is greater than stock {}" .format(row[4]))
+                    print('qty is greater...',quantity)
+                    raise Exception ("Qty not available in stock... try to reduce..")
+                else:
+                    print("Qty is ok")
+            else:
+                print("Med not found")
+        #price = price_entry.get()
+        discount = discount_entry.get()
+        if quantity and price:
+            amount = float(quantity) * float(price)
+            amount = amount - (float(discount) / 100 * amount)
+        else:
+            amount = 0
+
+        if patient_name and doctor_name and med_name and discount and quantity:
+            medicine_data.append((patient_name, patient_mobile, doctor_name, mode_of_pay, med_name, quantity, price, discount, amount))
+#            medicine_list.insert("", "end", values=(patient_name, patient_mobile, doctor_name, mode_of_pay, med_name, quantity, price, amount))
+            medicine_list.insert("", "end", values=(med_name, quantity, price, discount, amount))
+        else:
+            print("Please fill in all fields")
+            show_popup("Error", "Please fill in all fields")
+
+    # Function to display a popup message
+    def show_popup(title, message):
+        popup = tk.Toplevel(biil_screen)
+        popup.title(title)
+        popup.geometry("300x100")
+        popup.resizable(False, False)
+        popup_label = ttk.Label(popup, text=message)
+        popup_label.pack(pady=20)
+        close_button = tk.Button(popup, text="Close", command=popup.destroy)
+        close_button.pack()
+
+    # Function to reset all input fields and the Treeview
+    def reset_fields():
+        #name_combobox.set("Select Medicine")
+        global medicine_data
+        #global medicine_list
+        patient_name_entry.delete(0,"end")
+        patient_mobile_entry.delete(0, "end")
+        doctor_name_entry.delete(0, "end")
+        mode_of_pay_entry.delete(0, "end")
+
+        #med_name_entry.delete(0, "end")
+        name_combobox.delete(0,"end")
+        #manufacturer_entry.delete(0, "end")
+        quantity_entry.delete(0, "end")
+        #price_entry.delete(0, "end")
+        discount_entry.delete(0,"end")
+        medicine_data = []
+        #medicine_list = []
+        for item in medicine_list.get_children():
+            medicine_list.delete(item)
+
+        #medicine_list.delete(*medicine_list.get_children())
+
+    # Function to save data to the MySQL database
+    @with_cursor
+    def save_data(conn,cursor):
+        patient_name = patient_name_entry.get()
+        if not patient_name:
+        #if not medicine_list:
+            print("No data to save")
+            show_popup("Error", "No data to save")
+            return
+
+        try:
+            print("Connection Successful for Billing....")
+            # Insert data into the MySQL database
+            for data in medicine_data:
+                cursor.execute("INSERT INTO billing_tran (PatientName, MobileNum, PrescribedByDr, ModeOfPayment, MedicineName, Qty, Price, Discount, Amount) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)", data)
+                cursor.execute("update medicine_m set qty = qty - %s where medicineName = %s", (data[5], data[4]))
+            print("Data saved successfully!")
+            conn.commit()
+            show_popup("Success", "Data saved successfully!")
+            reset_fields()  # Reset input fields and the Treeview after a successful save
+        except mysql.connector.Error as err:
+            print(f"Error: {err}")
+            show_popup("Error", f"Error: {err}")
+
+    # Function to fetch medicine names from the MySQL table
+    @with_cursor
+    def fetch_medicine_names(conn,cur):
+        global rows
+        try:
+            cur.execute("SELECT * FROM medicine_m")
+            rows = cur.fetchall()
+            for row in rows:
+                medicine_name_values.append(row[2])
+  
+        except mysql.connector.Error as err:
+            print(f"Error: {err}")
+
+    # Create the main application window
+    biil_screen = tk.Toplevel(app)
+    biil_screen.title("MedPay Medical Store App")
+    welcome_label = tk.Label(biil_screen, text="Add Sales", font=("Arial", 18))
+    welcome_label.pack(side="top")
+    biil_screen.minsize(1050,530)
+    
+    # Section 1: Data entered once
+    section1_frame = ttk.LabelFrame(biil_screen, text="Patient Details")
+    section1_frame.pack(padx=10, pady=10, fill="both", expand=True)
+
+    patient_name_label = ttk.Label(section1_frame, text="Patient Name:")
+    patient_name_entry = ttk.Entry(section1_frame)
+
+    patient_mobile_label = ttk.Label(section1_frame, text="Patient Mobile#:")
+    patient_mobile_entry = ttk.Entry(section1_frame)
+
+    doctor_name_label = ttk.Label(section1_frame, text="Doctor Name:")
+    doctor_name_entry = ttk.Entry(section1_frame)
+
+    mode_of_pay_label = ttk.Label(section1_frame, text="Mode Of Payment:")
+    mode_of_pay_entry = ttk.Entry(section1_frame)
+
+    patient_name_label.grid(row=0, column=0, padx=5, pady=5)
+    patient_name_entry.grid(row=0, column=1, padx=5, pady=5)
+    doctor_name_label.grid(row=0, column=2, padx=5, pady=5)
+    doctor_name_entry.grid(row=0, column=3, padx=5, pady=5)
+    patient_mobile_label.grid(row=1, column=0, padx=5, pady=5)
+    patient_mobile_entry.grid(row=1, column=1, padx=5, pady=5)
+    mode_of_pay_label.grid(row=1, column=2, padx=5, pady=5)
+    mode_of_pay_entry.grid(row=1, column=3, padx=5, pady=5)
+
+    # Section 2: Data that can be repeated
+    section2_frame = ttk.LabelFrame(biil_screen, text="Medicine Details")
+    section2_frame.pack(padx=10, pady=10, fill="both", expand=True)
+
+    # Create a Combobox for "Medicine Name" that gets values from the MySQL table
+    medicine_name_label = ttk.Label(section2_frame, text="Medicine Name:")
+    medicine_name_values = []  # List to store values for the Combobox
+
+    fetch_medicine_names()  # Fetch medicine names when the application starts
+
+    name_combobox = ttk.Combobox(section2_frame, values=medicine_name_values)
+    name_combobox.set("Select Medicine")  # Default text for the Combobox
+
+    #med_name_label = ttk.Label(section2_frame, text="Medicine Name:")
+    #med_name_entry = ttk.Entry(section2_frame)
+
+    #manufacturer_label = ttk.Label(section2_frame, text="Manufacturer:")
+    #manufacturer_entry = ttk.Entry(section2_frame)
+
+    quantity_label = ttk.Label(section2_frame, text="Quantity:")
+    quantity_entry = ttk.Entry(section2_frame)
+
+    #price_label = ttk.Label(section2_frame, text="Price:")
+    #price_entry = ttk.Entry(section2_frame,state='readonly')
+
+    discount_label = ttk.Label(section2_frame, text="Discount:")
+    discount_entry = ttk.Entry(section2_frame)
+
+    add_button = tk.Button(section2_frame, text="Add Medicine", command=add_medicine)
+
+    medicine_name_label.grid(row=0, column=0,sticky="W",padx=5, pady=5)
+    name_combobox.grid(row=0, column=0, padx=5, pady=5)
+    #manufacturer_label.grid(row=1, column=0,  padx=5, pady=5)
+    #manufacturer_entry.grid(row=1, column=1, padx=5, pady=5)
+    quantity_label.grid(row=1, column=0, sticky="W", padx=5, pady=5)
+    quantity_entry.grid(row=1, column=0, padx=5, pady=5)
+    #price_label.grid(row=1, column=0, padx=5, pady=5)
+    #price_entry.grid(row=1, column=1, padx=5, pady=5)
+    discount_label.grid(row=2, column=0,sticky="W", padx=5, pady=5)
+    discount_entry.grid(row=2, column=0, padx=5, pady=5)
+    add_button.grid(row=3, columnspan=2, pady=10)
+
+    # Create a grid to display the medicine data
+    columns = ( "Medicine Name", "Quantity", "Price", "Discount", "Amount")
+    medicine_list = ttk.Treeview(section2_frame, columns=columns, show="headings")
+
+    # Define column headings
+    for col in columns:
+        medicine_list.heading(col, text=col)
+
+    # Pack the medicine list grid
+    medicine_list.grid(row=5, columnspan=2, padx=5, pady=5)
+
+    close_button = tk.Button(biil_screen,  text="Close", command=biil_screen.destroy,width=25,background="yellow")
+    close_button.pack(side="right")
+    # Create the "Save" button
+    save_button = tk.Button(biil_screen, text="Save", command=save_data,width=25,background="green",foreground="#fff")
+    save_button.pack(side="right")
+    
+
+    # Create the "Close" button
+
+    # Start the Tkinter main loop
+    biil_screen.mainloop()
+
+
+#inventory_gui.py
+
+
+
+import tkinter as tk 
+from tkinter import ttk
+from inventory import create_inventory, delete_inventory, read_inventory, update_inventory
+
+
+def open_stock_management(parent_window):
+    stock_window = tk.Toplevel(parent_window)
+    stock_window.title("MedPay Medical Store App")
+    stock_window.minsize(1330,300)
+    welcome_label = tk.Label(stock_window, text="Manage Stock - MedPay Medical Store", font=("Arial", 18))
+    welcome_label.pack(side="top")
+    # Function to add a new medicine to stock
+    def add_medicine():
+        medicine_code = medicine_code_entry.get()
+        product_name = medicine_name_entry.get()
+        quantity = quantity_entry.get()
+        med_category_value = med_category_entry.get()
+        expiry_date = expiry_date_entry.get()
+        price_value=price_Entry.get()
+        manufacture_date_value = manufacture_date_entry.get()
+        # batch_number = batch_number_entry.get()
+        prescription_required = rack_number_entry.get()
+        #rake number
+        create_inventory ((medicine_code,product_name,med_category_value, quantity,price_value,int(quantity)*float(price_value),manufacture_date_value, expiry_date,prescription_required))
+        update_inventory_table()
+        clear_input_fields()
+    
+    def update_inventory_table():
+        # Retrieve inventory records and update the table
+        results = read_inventory()
+
+        # Clear existing table data
+        for row in inventory_table.get_children():
+            inventory_table.delete(row)
+
+        # Insert new data into the table
+        for result in results:
+            inventory_table.insert("", "end",values=result[0:] + (f"Edit {result[0]}", f"Delete {result[0]}"))
+            
+    def edit_inventory_item():
+           # Get the selected item in the Treeview
+        selected_item = inventory_table.selection()[0]
+
+        # Get the values of the selected item
+        selected_item_values = inventory_table.item(selected_item, "values")
+
+        # Open a dialog box to allow the user to edit the selected item
+        dialog = tk.Toplevel(stock_window)
+        dialog.title("EDIT {} ".format(selected_item_values[2]))
+        
+        
+        medicine_code_label = tk.Label(dialog, text="Medicine Code")
+        medicine_code_entry = tk.Entry(dialog,textvariable=tk.StringVar(value=selected_item_values[1]))
+        medicine_name_label = ttk.Label(dialog, text="Medicine Name:")
+        medicine_name_entry = tk.Entry(dialog,textvariable=tk.StringVar(value=selected_item_values[2]))
+        medicine_category_label = ttk.Label(dialog, text="Medicine Category:")
+        med_category_entry = ttk.Combobox(dialog,values=('tablet', 'Syrup', 'bandage','ointment','misc'))
+        if selected_item_values[3] in ('tablet', 'Syrup', 'bandage','ointment','misc'):
+          med_category_entry.current(('tablet', 'Syrup', 'bandage','ointment','misc').index(selected_item_values[3]))
+          
+        
+        quantity_label = tk.Label(dialog, text="Quantity:")
+        quantity_entry = tk.Entry(dialog,textvariable=tk.StringVar(value=selected_item_values[4]))
+        price_label = tk.Label(dialog, text="Price:")
+        price_Entry = tk.Entry(dialog,textvariable=tk.StringVar(value=selected_item_values[5]))
+        manufacture_date_label = tk.Label(dialog, text="Manufacturer (YYYY-MM-DD):")
+        manufacture_date_entry = tk.Entry(dialog,textvariable=tk.StringVar(value=selected_item_values[7]))
+        
+        expiry_date_label = tk.Label(dialog, text="Expiry Date (YYYY-MM-DD):")
+        expiry_date_entry = tk.Entry(dialog,textvariable=tk.StringVar(value=selected_item_values[8]))
+
+        rack_number_label = tk.Label(dialog, text="Rack number")
+        rack_number_entry = tk.Entry(dialog,textvariable=tk.StringVar(value=selected_item_values[9]))
+        medicine_code_label.grid(row=0,column=0,padx="2px",pady="5px")
+        medicine_code_entry.grid(row=0,column=1,padx="2px",pady="5px")
+        medicine_name_label.grid(row=1,column=0,padx="2px",pady="5px")  
+        medicine_name_entry.grid(row=1,column=1,padx="2px",pady="5px")
+        medicine_category_label.grid(row=2,column=0,padx="2px",pady="5px")
+        med_category_entry.grid(row=2,column=1,padx="2px",pady="5px")
+        quantity_label.grid(row=3,column=0,padx="2px",pady="5px")
+        quantity_entry.grid(row=3,column=1,padx="2px",pady="5px")
+        price_label.grid(row=4,column=0,padx="2px",pady="5px")
+        price_Entry.grid(row=4,column=1,padx="2px",pady="5px",)
+        # Amount_label.pack()
+        # Amount_Entry.pack()
+        # manufacture_date_label.grid(row=1,column=4,padx="2px",pady="5px")
+        # manufacture_date_entry.grid(row=1,column=5,padx="2px",pady="5px")
+        expiry_date_label.grid(row=5,column=0,padx="2px",pady="5px")
+        expiry_date_entry.grid(row=5,column=1,padx="2px",pady="5px")
+        manufacture_date_label.grid(row=6,column=0,padx="2px",pady="5px")
+        manufacture_date_entry.grid(row=6,column=1,padx="2px",pady="5px")
+        rack_number_label.grid(row=7,column=0,padx="2px",pady="5px")
+        rack_number_entry.grid(row=7,column=1,padx="2px",pady="5px")
+      
+
+        save_button = tk.Button(dialog, text="Save Changes", command= lambda:[update_inventory(selected_item_values[0],(medicine_code_entry.get(),medicine_name_entry.get(),med_category_entry.get(),quantity_entry.get(),price_Entry.get(),int(quantity_entry.get())*float(price_Entry.get()), manufacture_date_entry.get(),expiry_date_entry.get(),rack_number_entry.get(),"SYSTEMUSER")),dialog.destroy(),update_inventory_table()],background="green",foreground="aliceblue")
+        save_button.grid(row=8,sticky="nsew",columnspan=2)
+        dialog.mainloop()
+        
+    def delete_inventory_item(id):
+        delete_inventory(id)
+        update_inventory_table()
+
+    def clear_input_fields():
+        medicine_code_entry.delete(0, tk.END)
+        medicine_name_entry.delete(0,tk.END)
+        med_category_entry.delete(0,tk.END)
+        price_Entry.delete(0,tk.END)
+
+        quantity_entry.delete(0, tk.END)
+        expiry_date_entry.delete(0, tk.END)
+        # batch_number_entry.delete(0,tk.END)
+        manufacture_date_entry.delete(0,tk.END)
+        rack_number_entry.delete(0,tk.END)
+        
+    def on_iventory_item_click(event):
+        item = inventory_table.selection()[0]
+        column = inventory_table.identify_column(event.x)
+        if column == "#11":
+            # Edit button clicked
+            edit_inventory_item()
+        elif column == "#12":
+            # print(item)
+            # Delete button clicked
+            delete_inventory_item(int(inventory_table.item(item, "values")[0]))
+# (MedicineCode, MedicineName, MedicineCategory, Qty, Price, Amount, ManufactureDate, ExpiryDate, RackNumber)
+
+    add_medicine_frame = ttk.LabelFrame(stock_window, text="add Medicines")
+    add_medicine_frame.pack(padx=10, fill="x", expand=True,side="top")
+    
+
+    medicine_code_label = tk.Label(add_medicine_frame, text="Medicine Code")
+
+    medicine_code_entry = tk.Entry(add_medicine_frame)
+   
+    medicine_name_label = ttk.Label(add_medicine_frame, text="Medicine Name:")
+    medicine_name_entry = tk.Entry(add_medicine_frame)
+    medicine_category_label = ttk.Label(add_medicine_frame, text="Medicine Category:")
+    med_category_entry = ttk.Combobox(add_medicine_frame,values=('tablet', 'Syrup', 'bandage','ointment','misc'))
+    quantity_label = tk.Label(add_medicine_frame, text="Quantity:")
+    quantity_entry = tk.Entry(add_medicine_frame)
+    price_label = tk.Label(add_medicine_frame, text="Price:")
+    price_Entry = tk.Entry(add_medicine_frame)
+    manufacture_date_label = tk.Label(add_medicine_frame, text="Manufacturer (YYYY-MM-DD):")
+    manufacture_date_entry = tk.Entry(add_medicine_frame)
+    
+    expiry_date_label = tk.Label(add_medicine_frame, text="Expiry Date (YYYY-MM-DD):")
+    expiry_date_entry = tk.Entry(add_medicine_frame)
+
+    rack_number_label = tk.Label(add_medicine_frame, text="Rack number")
+    rack_number_entry = tk.Entry(add_medicine_frame)
+
+    create_button = tk.Button(add_medicine_frame, text="Add Inventory Item", command=add_medicine,background="green",foreground="aliceblue",width=50)
+
+    # Create a treeview widget to display the inventory items in a table
+    
+    inventory_table = ttk.Treeview(stock_window, columns=("id","Medicine Code","Medicine Name","Medicine Category", "Quantity","price","Amount","Manufacture Date","Expiry Date","Rack Number", "Edit","Delete"))
+    
+    inventory_table.column("#0", width=50)
+    inventory_table.heading("#1", text="Id")
+    inventory_table.column("#1", width=20)
+    inventory_table.heading("#2", text="Medicine Code")
+    inventory_table.column("#2", width=80)
+    inventory_table.heading("#3", text="Medicine Name")
+    inventory_table.heading("#4", text="Medicine Category")
+    inventory_table.column("#4", width=60)
+    
+    inventory_table.heading("#5", text="quantity")
+    inventory_table.column("#5", width=50)
+    inventory_table.heading("#6", text="price")
+    inventory_table.column("#6", width=50)
+    inventory_table.heading("#7",text="Amount")
+    inventory_table.column("#7",width=50)
+    inventory_table.heading("#8",text="Manufacture Date")
+    inventory_table.heading("#9",text="Expiry Date")
+    inventory_table.heading("#10",text="Rack Number")
+    inventory_table.heading("#11", text="Edit")
+    inventory_table.column("#11",width=50)
+    inventory_table.heading("#12", text="Delete")
+    inventory_table.column("#12", width=50)
+    for column in inventory_table["columns"]:
+        inventory_table.column(column, anchor='center')
+    inventory_table.bind("<Button-1>", on_iventory_item_click)
+    update_inventory_table()  # Populate the table with existing data
+
+    # Pack the GUI elements
+    medicine_code_label.grid(row=0,column=0,padx="2px",pady="5px")
+    medicine_code_entry.grid(row=0,column=1,padx="2px",pady="5px")
+    medicine_name_label.grid(row=0,column=2,padx="2px",pady="5px")  
+    medicine_name_entry.grid(row=0,column=3,padx="2px",pady="5px")
+    medicine_category_label.grid(row=0,column=4,padx="2px",pady="5px")
+    med_category_entry.grid(row=0,column=5,padx="2px",pady="5px")
+    quantity_label.grid(row=1,column=0,padx="2px",pady="5px")
+    quantity_entry.grid(row=1,column=1,padx="2px",pady="5px")
+    price_label.grid(row=1,column=2,padx="2px",pady="5px")
+    price_Entry.grid(row=1,column=3,padx="2px",pady="5px",)
+    # Amount_label.pack()
+    # Amount_Entry.pack()
+    # manufacture_date_label.grid(row=1,column=4,padx="2px",pady="5px")
+    # manufacture_date_entry.grid(row=1,column=5,padx="2px",pady="5px")
+    expiry_date_label.grid(row=1,column=4,padx="2px",pady="5px")
+    expiry_date_entry.grid(row=1,column=5,padx="2px",pady="5px")
+    manufacture_date_label.grid(row=2,column=0,padx="2px",pady="5px")
+    manufacture_date_entry.grid(row=2,column=1,padx="2px",pady="5px")
+    rack_number_label.grid(row=2,column=2,padx="2px",pady="5px")
+    rack_number_entry.grid(row=2,column=3,padx="2px",pady="5px")
+    create_button.grid(row=2,column=4,padx="2px",pady="5px",columnspan=2)
+    inventory_table.pack(side="top",fill="both")
+
+    stock_window.mainloop()
